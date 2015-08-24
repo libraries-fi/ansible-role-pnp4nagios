@@ -1,0 +1,7 @@
+---
+# tasks file for kifi.pnp4nagios
+- name: Create static configuration
+  synchronize: src=pnp4nagios dest=/etc/
+
+- name: Create data packet encryption key
+  template: src=secret.key.j2 dest=/etc/pnp4nagios/secret.key
