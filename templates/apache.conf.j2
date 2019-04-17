@@ -1,0 +1,39 @@
+DBDriver mysql
+DBDParams "\
+    host=localhost \
+    port=3306 \
+    dbname={{ icingaweb2_db.name }} \
+    user={{ icingaweb2_db.user }} \
+    pass={{ icingaweb2_db.password }}"
+AuthnCacheSOCache dbm
+
+Alias /pnp4nagios "/usr/local/pnp4nagios/share"
+
+<Directory "/usr/local/pnp4nagios/share">
+    AllowOverride None
+
+    # Use authentication example in
+    # https://github.com/Icinga/icingaweb2-module-pnp/issues/29#issuecomment-397759368
+    AuthType Basic
+    AuthName "PNP Access"
+    AuthBasicProvider socache dbd
+    AuthDBDUserPWQuery "SELECT password_hash FROM icingaweb_user WHERE name = %s"
+    AuthnCacheProvideFor dbd
+    AuthnCacheContext pnpauth
+    Require valid-user
+
+    <IfModule mod_rewrite.c>
+        # Turn on URL rewriting
+        RewriteEngine On
+        Options symLinksIfOwnerMatch
+        # Installation directory
+        RewriteBase /pnp4nagios/
+        # Protect application and system files from being viewed
+        RewriteRule "^(?:application|modules|system)/" - [F]
+        # Allow any files or directories that exist to be displayed directly
+        RewriteCond "%{REQUEST_FILENAME}" !-f
+        RewriteCond "%{REQUEST_FILENAME}" !-d
+        # Rewrite all other URLs to index.php/URL
+        RewriteRule "^.*$" "index.php/$0" [PT]
+    </IfModule>
+</Directory>
