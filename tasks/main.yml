@@ -1,7 +1,104 @@
 ---
-# tasks file for kifi.pnp4nagios
-- name: Create static configuration
-  synchronize: src=pnp4nagios dest=/etc/
+- name: Install dependencies
+  apt:
+    name:
+      - librrds-perl
+      - rrdtool
+      - libaprutil1-dbd-mysql
 
-- name: Create data packet encryption key
-  template: src=secret.key.j2 dest=/etc/pnp4nagios/secret.key
+- name: Create nagios user
+  user:
+    name: nagios
+    system: yes
+    shell: /bin/false
+    state: present
+    groups:
+      - nagios
+
+- name: Create temporary dir for unpacking
+  tempfile:
+    state: directory
+    suffix: artifacts
+  register: pnp4nagios_temp_dir
+
+- name: Download pnp4nagios
+  include_role:
+    name: libraries-fi.gitlab_artifact
+  vars:
+    gitlab_artifact_project: libraries-fi/pnp4nagios
+    gitlab_artifact_path: "{{ pnp4nagios_temp_dir.path }}"
+
+- name: Install pnp4nagios
+  unarchive:
+    remote_src: yes
+    src: "{{ pnp4nagios_temp_dir.path }}/pnp4nagios.tar.gz"
+    dest: /
+  notify:
+    - restart npcd
+
+- name: Allow icingaweb2 pnp plugin to read configuration files
+  file:
+    path: /usr/local/pnp4nagios/etc/
+    owner: nagios
+    group: www-data
+    mode: u=rwx,g=rx
+    recurse: yes
+
+- name: Copy custom templates
+  copy:
+    src: templates
+    dest: /usr/local/pnp4nagios/share/
+    owner: nagios
+  notify: restart npcd
+
+# These are applied only when rdd database is created.
+- name: Copy custom check_commands
+  copy:
+    src: check_commands
+    dest: /usr/local/pnp4nagios/etc/
+    owner: nagios
+    group: nagios
+  notify: restart npcd
+
+# https://exchange.icinga.com/icinga/PNP Duplicated Graphs in Detail View
+- name: Remove config_local.php
+  file:
+    path: /usr/local/pnp4nagios/etc/config_local.php
+    state: absent
+
+- name: Remove install.php
+  file:
+    path: /usr/local/pnp4nagios/share/install.php
+    state: absent
+
+- name: Configure perfdata dir
+  lineinfile:
+    path: /usr/local/pnp4nagios/etc/npcd.cfg
+    regexp: '^perfdata_spool_dir ='
+    line: 'perfdata_spool_dir = /var/spool/icinga2/perfdata'
+  notify: restart npcd
+
+- name: Enable Apache modules for authentication
+  apache2_module:
+    name: "{{ item }}"
+  loop:
+    - authn_dbd
+    - socache_dbm
+    - authn_socache
+  notify: reload apache
+
+- name: Copy modified Apache conf
+  template:
+    src: apache.conf.j2
+    dest: /etc/apache2/conf-available/pnp4nagios.conf
+    owner: www-data
+  notify: reload apache
+
+- name: Enable pnp4nagios Apache config
+  command: a2enconf pnp4nagios
+
+- name: Enable npcd service
+  systemd:
+    name: "npcd"
+    daemon_reload: yes
+    enabled: true
