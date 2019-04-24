@@ -26,7 +26,8 @@
     name: libraries-fi.gitlab_artifact
   vars:
     gitlab_artifact_project: libraries-fi/pnp4nagios
-    gitlab_artifact_path: "{{ pnp4nagios_temp_dir.path }}"
+    gitlab_artifact_path: pnp4nagios.tar.gz
+    gitlab_artifact_out_path: "{{ pnp4nagios_temp_dir.path }}"
 
 - name: Install pnp4nagios
   unarchive:
